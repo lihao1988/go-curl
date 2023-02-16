@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strings"
 	"time"
 )
@@ -49,6 +50,7 @@ type Client struct {
 func NewClient(host string) *Client {
 	return &Client{
 		host:    host,
+		headers: map[string]string{},
 		timeout: timeout,
 	}
 }
@@ -78,43 +80,36 @@ func (c *Client) SetBody(body string) *Client {
 }
 
 // CurlForJson url request for json
-func (c *Client) CurlForJson(uri string, method MethodType, data map[string]interface{}) ([]byte, error) {
+func (c *Client) CurlForJson(path string, method MethodType, data map[string]interface{}) ([]byte, error) {
 	dataJsonByte, err := json.Marshal(data)
 	if err != nil {
 		return nil, err
 	}
 
-	return c.Curl(uri, method, string(dataJsonByte), JsonType)
+	return c.Curl(path, method, string(dataJsonByte), JsonType)
 }
 
 // Curl url request
-func (c *Client) Curl(uri string, method MethodType, data interface{}, cType ContentType) ([]byte, error) {
-	// request client
+func (c *Client) Curl(path string, method MethodType, data interface{}, cType ContentType) ([]byte, error) {
+	// request client, parse url and body
 	client := &http.Client{Timeout: 30 * time.Second}
+	reqUrl, body, err := c.parse(path, method, data)
+	if err != nil {
+		return nil, err
+	}
 
 	// request data
-	var body io.Reader
 	switch cType {
 	case JsonType:
 		c.headers["Content-Type"] = "application/json"
-		body = strings.NewReader(fmt.Sprintf("%v", data))
 	case FormType:
-		formDataMap, dataOk := data.(map[string]string)
-		if data != nil && dataOk {
-			return nil, errors.New("the request type should use [map]")
-		}
-		formData := make(url.Values)
 		c.headers["Content-Type"] = "application/x-www-form-urlencoded"
-		for key, value := range formDataMap {
-			formData.Set(key, value)
-		}
-		body = strings.NewReader(formData.Encode())
 	default:
-		body = strings.NewReader(c.body)
+		body = c.body
 	}
 
 	// request
-	req, err := http.NewRequest(string(method), c.getApiUrl(uri), body)
+	req, err := http.NewRequest(string(method), reqUrl, strings.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +141,48 @@ func (c *Client) Curl(uri string, method MethodType, data interface{}, cType Con
 	return bodyByte, nil
 }
 
+// parse url and data
+func (c *Client) parse(path string, method MethodType, data interface{}) (string, string, error) {
+	var body string
+	reqUrl := c.getApiUrl(path)
+
+	// request data
+	if data == nil {
+		return reqUrl, body, nil
+	}
+
+	rv := reflect.ValueOf(data)
+	switch rv.Kind() {
+	case reflect.String:
+		return reqUrl, fmt.Sprintf("%v", data), nil
+	case reflect.Map:
+		dataMap, dataOk := data.(map[string]string)
+		if data != nil && dataOk == false {
+			return reqUrl, body, errors.New("the request type should use 'map[string]string'")
+		}
+
+		params := make(url.Values)
+		for key, value := range dataMap {
+			params.Set(key, value)
+		}
+
+		switch method {
+		case Get, Delete:
+			reqUrlObj, err := url.Parse(reqUrl)
+			if err != nil {
+				return reqUrl, body, err
+			}
+			reqUrlObj.RawQuery = params.Encode()
+			reqUrl = reqUrlObj.String()
+		case Post, Put:
+			body = params.Encode()
+		}
+	}
+
+	return reqUrl, body, nil
+}
+
 // get api_url
-func (c *Client) getApiUrl(uri string) string {
-	return fmt.Sprintf("%s/%s", c.host, uri)
+func (c *Client) getApiUrl(path string) string {
+	return fmt.Sprintf("%s%s", c.host, path)
 }
