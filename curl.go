@@ -79,21 +79,51 @@ func (c *Client) SetBody(body string) *Client {
 	return c
 }
 
-// CurlForJson url request for json
-func (c *Client) CurlForJson(path string, method MethodType, data map[string]interface{}) ([]byte, error) {
-	dataJsonByte, err := json.Marshal(data)
-	if err != nil {
-		return nil, err
-	}
+// Get request get, content_type for "application/json"
+func (c *Client) Get(path string, data interface{}) ([]byte, error) {
+	return c.Curl(path, Get, data, JsonType)
+}
 
-	return c.Curl(path, method, string(dataJsonByte), JsonType)
+// Delete request delete, content_type for "application/json"
+func (c *Client) Delete(path string, data interface{}) ([]byte, error) {
+	return c.Curl(path, Delete, data, JsonType)
+}
+
+// Post request post, content_type for "application/json"
+func (c *Client) Post(path string, data interface{}) ([]byte, error) {
+	return c.Curl(path, Post, data, JsonType)
+}
+
+// PostByForm request post, content_type for "application/x-www-form-urlencoded"
+func (c *Client) PostByForm(path string, data interface{}) ([]byte, error) {
+	return c.Curl(path, Post, data, FormType)
+}
+
+// Put request put, content_type for "application/json"
+func (c *Client) Put(path string, data interface{}) ([]byte, error) {
+	return c.Curl(path, Put, data, JsonType)
+}
+
+// PutByForm request put, content_type for "application/x-www-form-urlencoded"
+func (c *Client) PutByForm(path string, data interface{}) ([]byte, error) {
+	return c.Curl(path, Put, data, FormType)
+}
+
+// Patch request patch, content_type for "application/json"
+func (c *Client) Patch(path string, data interface{}) ([]byte, error) {
+	return c.Curl(path, Patch, data, JsonType)
+}
+
+// PatchByForm request patch, content_type for "application/x-www-form-urlencoded"
+func (c *Client) PatchByForm(path string, data interface{}) ([]byte, error) {
+	return c.Curl(path, Patch, data, JsonType)
 }
 
 // Curl url request
 func (c *Client) Curl(path string, method MethodType, data interface{}, cType ContentType) ([]byte, error) {
 	// request client, parse url and body
 	client := &http.Client{Timeout: 30 * time.Second}
-	reqUrl, body, err := c.parse(path, method, data)
+	reqUrl, body, err := c.parse(path, method, data, cType)
 	if err != nil {
 		return nil, err
 	}
@@ -104,8 +134,6 @@ func (c *Client) Curl(path string, method MethodType, data interface{}, cType Co
 		c.headers["Content-Type"] = "application/json"
 	case FormType:
 		c.headers["Content-Type"] = "application/x-www-form-urlencoded"
-	default:
-		body = c.body
 	}
 
 	// request
@@ -142,7 +170,7 @@ func (c *Client) Curl(path string, method MethodType, data interface{}, cType Co
 }
 
 // parse url and data
-func (c *Client) parse(path string, method MethodType, data interface{}) (string, string, error) {
+func (c *Client) parse(path string, method MethodType, data interface{}, cType ContentType) (string, string, error) {
 	var body string
 	reqUrl := c.getApiUrl(path)
 
@@ -156,26 +184,36 @@ func (c *Client) parse(path string, method MethodType, data interface{}) (string
 	case reflect.String:
 		return reqUrl, fmt.Sprintf("%v", data), nil
 	case reflect.Map:
-		dataMap, dataOk := data.(map[string]string)
-		if data != nil && dataOk == false {
-			return reqUrl, body, errors.New("the request type should use 'map[string]string'")
-		}
-
-		params := make(url.Values)
-		for key, value := range dataMap {
-			params.Set(key, value)
-		}
-
 		switch method {
 		case Get, Delete:
+			params, err := getUrlValues(data)
+			if err != nil {
+				return "", "", err
+			}
+
 			reqUrlObj, err := url.Parse(reqUrl)
 			if err != nil {
-				return reqUrl, body, err
+				return "", "", err
 			}
 			reqUrlObj.RawQuery = params.Encode()
 			reqUrl = reqUrlObj.String()
-		case Post, Put:
-			body = params.Encode()
+		case Post, Put, Patch:
+			switch cType {
+			case JsonType:
+				dataBytes, err := json.Marshal(data)
+				if err != nil {
+					return "", "", err
+				}
+				body = string(dataBytes)
+			case FormType:
+				params, err := getUrlValues(data)
+				if err != nil {
+					return "", "", err
+				}
+				body = params.Encode()
+			default:
+				body = c.body
+			}
 		}
 	}
 
@@ -185,4 +223,19 @@ func (c *Client) parse(path string, method MethodType, data interface{}) (string
 // get api_url
 func (c *Client) getApiUrl(path string) string {
 	return fmt.Sprintf("%s%s", c.host, path)
+}
+
+// 设置 url values
+func getUrlValues(data interface{}) (*url.Values, error) {
+	dataMap, dataOk := data.(map[string]string)
+	if data != nil && dataOk == false {
+		return nil, errors.New("the request type should use 'map[string]string'")
+	}
+
+	params := make(url.Values)
+	for key, value := range dataMap {
+		params.Set(key, value)
+	}
+
+	return &params, nil
 }
