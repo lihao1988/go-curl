@@ -29,7 +29,7 @@ const (
 	// content_type
 	JsonType  ContentType = "application/json"
 	FormType  ContentType = "application/x-www-form-urlencoded"
-	OtherType ContentType = "you set data"
+	OtherType ContentType = "null" // need set header and body
 
 	// timeout const
 	timeout = 30 * time.Second // second

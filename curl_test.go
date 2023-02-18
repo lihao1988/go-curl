@@ -53,7 +53,7 @@ func TestDelete(t *testing.T) {
 	client := NewClient("http://localhost:8083")
 	data := map[string]string{"namespace": "1"}
 
-	dataBytes, err := client.Curl("/iaas/appio", Delete, data, JsonType)
+	dataBytes, err := client.Delete("/iaas/appio", data)
 	fmt.Println("Delete: ", string(dataBytes), err)
 
 	dataBytes, err = client.Curl("/iaas/appio", Delete, data, JsonType)
