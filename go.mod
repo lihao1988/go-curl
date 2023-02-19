@@ -1,3 +1,3 @@
 module github.com/lihao1988/go-curl
 
-go 1.17
+go 1.15
