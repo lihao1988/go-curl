@@ -21,7 +21,7 @@ go get gitee.com/lihao1988/go-curl
 ## 版本要求
 Go 1.15 or above.
 
-##HTTP 函数
+## HTTP 函数
 ### 1. Get Request
 ```go
 // example - 1
